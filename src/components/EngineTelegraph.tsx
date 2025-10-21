@@ -30,6 +30,7 @@ export default function EngineTelegraph() {
   const [currentPosition, setCurrentPosition] = useState<TelegraphPosition>('stop');
   const [currentAngle, setCurrentAngle] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [audioInitialized, setAudioInitialized] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const bellAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -83,12 +84,24 @@ export default function EngineTelegraph() {
 
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
+    
+    if (!audioInitialized && bellAudioRef.current) {
+      bellAudioRef.current.load();
+      setAudioInitialized(true);
+    }
+    
     setIsDragging(true);
     updateAngleFromMouse(e.clientX, e.clientY);
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
     e.preventDefault();
+    
+    if (!audioInitialized && bellAudioRef.current) {
+      bellAudioRef.current.load();
+      setAudioInitialized(true);
+    }
+    
     setIsDragging(true);
     const touch = e.touches[0];
     updateAngleFromMouse(touch.clientX, touch.clientY);
@@ -127,11 +140,25 @@ export default function EngineTelegraph() {
   }, [isDragging, currentPosition]);
 
   useEffect(() => {
-    const audio = new Audio('https://actions.google.com/sounds/v1/alarms/ship_bell.ogg');
-    audio.volume = 1.0;
+    const audio = new Audio();
+    audio.src = 'https://www.soundjay.com/mechanical/sounds/bell-ringing-05.mp3';
+    audio.preload = 'auto';
+    audio.volume = 0.7;
     bellAudioRef.current = audio;
 
+    const initAudio = () => {
+      if (audio && !audioInitialized) {
+        audio.load();
+        setAudioInitialized(true);
+      }
+    };
+
+    document.addEventListener('click', initAudio, { once: true });
+    document.addEventListener('touchstart', initAudio, { once: true });
+
     return () => {
+      document.removeEventListener('click', initAudio);
+      document.removeEventListener('touchstart', initAudio);
       if (bellAudioRef.current) {
         bellAudioRef.current.pause();
         bellAudioRef.current = null;

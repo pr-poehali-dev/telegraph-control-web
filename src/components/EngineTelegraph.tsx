@@ -28,47 +28,20 @@ const POSITIONS: { angle: number; label: string; key: TelegraphPosition }[] = [
 
 export default function EngineTelegraph() {
   const [currentPosition, setCurrentPosition] = useState<TelegraphPosition>('stop');
+  const [currentAngle, setCurrentAngle] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const leverRef = useRef<HTMLDivElement>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
+  const bellAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const getCurrentAngle = () => {
-    return POSITIONS.find(p => p.key === currentPosition)?.angle || 0;
+    return currentAngle;
   };
 
   const playBell = () => {
-    if (!audioContextRef.current) return;
-    
-    const audioContext = audioContextRef.current;
-    
-    const createBellHit = (startTime: number, frequency: number, intensity: number) => {
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-      const filter = audioContext.createBiquadFilter();
-      
-      oscillator.type = 'triangle';
-      oscillator.frequency.value = frequency;
-      
-      filter.type = 'bandpass';
-      filter.frequency.value = frequency * 2;
-      filter.Q.value = 1;
-      
-      oscillator.connect(filter);
-      filter.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-      
-      gainNode.gain.setValueAtTime(intensity, startTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + 1.2);
-      
-      oscillator.start(startTime);
-      oscillator.stop(startTime + 1.2);
-    };
-    
-    const now = audioContext.currentTime;
-    createBellHit(now, 1200, 0.4);
-    createBellHit(now + 0.002, 1800, 0.3);
-    createBellHit(now + 0.004, 2400, 0.2);
-    createBellHit(now + 0.006, 3000, 0.15);
+    if (bellAudioRef.current) {
+      bellAudioRef.current.currentTime = 0;
+      bellAudioRef.current.play().catch(() => {});
+    }
   };
 
   const findClosestPosition = (angle: number): TelegraphPosition => {
@@ -87,18 +60,41 @@ export default function EngineTelegraph() {
   };
 
   const handlePointerDown = (e: React.PointerEvent) => {
+    e.preventDefault();
     setIsDragging(true);
     if (e.currentTarget instanceof Element) {
       e.currentTarget.setPointerCapture(e.pointerId);
     }
     
-    if (!audioContextRef.current) {
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const telegraphElement = document.querySelector('.telegraph-dial');
+    if (!telegraphElement) return;
+
+    const rect = telegraphElement.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    const deltaX = e.clientX - centerX;
+    const deltaY = e.clientY - centerY;
+
+    let angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
+    angle = angle - 90;
+
+    if (angle < -180) angle += 360;
+    if (angle > 180) angle -= 360;
+
+    angle = Math.max(-135, Math.min(180, angle));
+    setCurrentAngle(angle);
+
+    const newPosition = findClosestPosition(angle);
+    if (newPosition !== currentPosition) {
+      setCurrentPosition(newPosition);
+      playBell();
     }
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!isDragging) return;
+    e.preventDefault();
 
     const telegraphElement = document.querySelector('.telegraph-dial');
     if (!telegraphElement) return;
@@ -117,6 +113,7 @@ export default function EngineTelegraph() {
     if (angle > 180) angle -= 360;
 
     angle = Math.max(-135, Math.min(180, angle));
+    setCurrentAngle(angle);
 
     const newPosition = findClosestPosition(angle);
     if (newPosition !== currentPosition) {
@@ -130,9 +127,14 @@ export default function EngineTelegraph() {
   };
 
   useEffect(() => {
+    const audio = new Audio('https://cdn.pixabay.com/download/audio/2022/03/15/audio_c0be531c83.mp3?filename=ship-bell-sound-6617.mp3');
+    audio.volume = 0.6;
+    bellAudioRef.current = audio;
+
     return () => {
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
+      if (bellAudioRef.current) {
+        bellAudioRef.current.pause();
+        bellAudioRef.current = null;
       }
     };
   }, []);
@@ -177,7 +179,7 @@ export default function EngineTelegraph() {
               className="absolute inset-0 flex items-center justify-center pointer-events-none"
               style={{
                 transform: `rotate(${getCurrentAngle()}deg)`,
-                transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                transition: 'none',
               }}
             >
               <div className="absolute top-1/2 w-3 h-32 -mt-32 bg-gradient-to-b from-brass via-copper to-brass rounded-full shadow-xl pointer-events-none" />

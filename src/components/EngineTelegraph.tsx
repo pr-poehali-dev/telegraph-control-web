@@ -40,20 +40,35 @@ export default function EngineTelegraph() {
     if (!audioContextRef.current) return;
     
     const audioContext = audioContextRef.current;
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
     
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
+    const createBellHit = (startTime: number, frequency: number, intensity: number) => {
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      const filter = audioContext.createBiquadFilter();
+      
+      oscillator.type = 'triangle';
+      oscillator.frequency.value = frequency;
+      
+      filter.type = 'bandpass';
+      filter.frequency.value = frequency * 2;
+      filter.Q.value = 1;
+      
+      oscillator.connect(filter);
+      filter.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      gainNode.gain.setValueAtTime(intensity, startTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + 1.2);
+      
+      oscillator.start(startTime);
+      oscillator.stop(startTime + 1.2);
+    };
     
-    oscillator.frequency.value = 800;
-    oscillator.type = 'sine';
-    
-    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-    
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.5);
+    const now = audioContext.currentTime;
+    createBellHit(now, 1200, 0.4);
+    createBellHit(now + 0.002, 1800, 0.3);
+    createBellHit(now + 0.004, 2400, 0.2);
+    createBellHit(now + 0.006, 3000, 0.15);
   };
 
   const findClosestPosition = (angle: number): TelegraphPosition => {
@@ -83,11 +98,12 @@ export default function EngineTelegraph() {
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!isDragging || !leverRef.current) return;
+    if (!isDragging) return;
 
-    const rect = leverRef.current.parentElement?.getBoundingClientRect();
-    if (!rect) return;
+    const telegraphElement = document.querySelector('.telegraph-dial');
+    if (!telegraphElement) return;
 
+    const rect = telegraphElement.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
 
@@ -127,7 +143,7 @@ export default function EngineTelegraph() {
         <div className="absolute inset-0 bg-brass/5 blur-3xl rounded-full" />
         
         <div className="relative bg-gradient-to-b from-brass/20 to-copper/30 rounded-full p-8 shadow-2xl border-8 border-brass/40">
-          <div className="relative w-80 h-80 md:w-96 md:h-96 bg-gradient-to-br from-navy/90 to-primary rounded-full shadow-inner flex items-center justify-center border-4 border-brass/60">
+          <div className="telegraph-dial relative w-80 h-80 md:w-96 md:h-96 bg-gradient-to-br from-navy/90 to-primary rounded-full shadow-inner flex items-center justify-center border-4 border-brass/60">
             
             {POSITIONS.map((pos) => {
               const radius = 140;
@@ -158,18 +174,20 @@ export default function EngineTelegraph() {
 
             <div
               ref={leverRef}
-              className="absolute inset-0 flex items-center justify-center cursor-grab active:cursor-grabbing touch-none select-none"
+              className="absolute inset-0 flex items-center justify-center pointer-events-none"
               style={{
                 transform: `rotate(${getCurrentAngle()}deg)`,
                 transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
               }}
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-              onPointerCancel={handlePointerUp}
             >
-              <div className="absolute top-1/2 w-3 h-32 -mt-32 bg-gradient-to-b from-brass via-copper to-brass rounded-full shadow-xl" />
-              <div className="absolute top-1/2 -mt-24 w-10 h-10 bg-gradient-to-br from-copper to-brass rounded-full shadow-lg border-2 border-brass/80" />
+              <div className="absolute top-1/2 w-3 h-32 -mt-32 bg-gradient-to-b from-brass via-copper to-brass rounded-full shadow-xl pointer-events-none" />
+              <div 
+                className="absolute top-1/2 -mt-24 w-12 h-12 bg-gradient-to-br from-copper to-brass rounded-full shadow-lg border-3 border-brass/80 cursor-grab active:cursor-grabbing pointer-events-auto"
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerCancel={handlePointerUp}
+              />
             </div>
 
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 mt-24 bg-navy/80 px-6 py-3 rounded-lg border-2 border-brass/60 shadow-xl">
